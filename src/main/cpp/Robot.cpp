@@ -5,6 +5,8 @@
 
 #include <frc/Timer.h>
 #include <frc/smartdashboard/SmartDashboard.h>
+#include <frc/DigitalInput.h>
+#include <frc/AnalogInput.h>
 #include "ctre/Phoenix.h"
 
 Robot::Robot() {
@@ -19,16 +21,32 @@ const double WHEEL_SEPERATION_LENGTH = 27/2;
 frc::Joystick stick0{0};
 frc::Joystick stick1{1};
 
-TalonSRX driveLF = {12};
-TalonSRX driveLR = {13};
-TalonSRX driveRF = {4};
-TalonSRX driveRR = {6};
+TalonSRX driveLF = {1};//Mecanum Left Front
+TalonSRX driveLR = {2};//Mecanum Left Rear
+TalonSRX driveRF = {3};//Mecanum Right Front
+TalonSRX driveRR = {4};//Mecanum Right Rear
+TalonSRX lift1 = {5};//Lift Master
+VictorSPX lift2 = {6};//Lift Slave
+TalonSRX arm1 = {7};//Arm Master
+VictorSPX arm2 = {8};//Arm Slave
+VictorSPX intake = {9};//Intake
 
+frc::DigitalInput LimLTop(0);//Limit switch lift top
+frc::DigitalInput LimLBot(1);//Limit switch lift bottom
+frc::DigitalInput LimAMax(2);//Limit switch arm max
+frc::DigitalInput LimAMin(3);//Limit switch arm min
+
+frc::AnalogInput PotArm(0);//Potentiometer for arm rotation
+
+//Mecanum Output Variables
 double LF_Out;
 double LR_Out;
 double RF_Out;
 double RR_Out;
 
+
+//Absolute value function for floating point numbers
+//Arg input: number to be absolutely valued
 double fabs(double input){
 	if(input >= 0){
 		return input;
@@ -42,6 +60,30 @@ double fabs(double input){
 }
 
 void Robot::RobotInit() {
+	//Motor Configurations
+	driveLF.SetInverted(true);
+	driveLF.SetNeutralMode(Brake);
+	driveLR.SetInverted(true);
+	driveLR.SetNeutralMode(Brake);
+	driveRF.SetInverted(false);
+	driveRF.SetNeutralMode(Brake);
+	driveRR.SetInverted(false);
+	driveRR.SetNeutralMode(Brake);
+	arm1.SetInverted(false);
+	arm1.SetNeutralMode(Brake);
+	arm2.SetInverted(true);
+	arm2.SetNeutralMode(Brake);
+	lift1.SetInverted(false);
+	lift1.SetNeutralMode(Brake);
+	lift2.SetInverted(true);
+	lift2.SetNeutralMode(Brake);
+	intake.SetInverted(false);
+	intake.SetNeutralMode(Brake);
+
+	lift2.Set(ControlMode::Follower, 5);
+	arm2.Set(ControlMode::Follower, 7);
+
+
 	m_chooser.SetDefaultOption(kAutoNameDefault, kAutoNameDefault);
 	m_chooser.AddOption(kAutoNameCustom, kAutoNameCustom);
 	frc::SmartDashboard::PutData("Auto Modes", &m_chooser);
@@ -87,6 +129,36 @@ void Robot::OperatorControl() {
 		driveLR.Set(ControlMode::PercentOutput, LR_Out);
 		driveRF.Set(ControlMode::PercentOutput, RF_Out);
 		driveRR.Set(ControlMode::PercentOutput, RR_Out);
+
+		if(stick1.GetRawButton(3) == true && LimLTop.Get() == false){
+			lift1.Set(ControlMode::PercentOutput, 1.0);
+		}
+		else if(stick1.GetRawButton(4) == true && LimLBot.Get() == false){
+			lift1.Set(ControlMode::PercentOutput, -1.0);
+		}
+		else{
+			lift1.Set(ControlMode::PercentOutput, 0.3);
+		}
+
+		if(stick1.GetY() > THRESHOLD && LimAMax.Get() == false){
+			arm1.Set(ControlMode::PercentOutput, stick1.GetY());
+		}
+		else if(stick1.GetY() < -THRESHOLD && LimAMin.Get() == false){
+			arm1.Set(ControlMode::PercentOutput, stick1.GetY());
+		}
+		else{
+			arm1.Set(ControlMode::PercentOutput, 0.3);
+		}
+
+		if(stick1.GetRawButton(1) == true){
+			intake.Set(ControlMode::PercentOutput, 1.0);
+		}
+		else if(stick1.GetRawButton(2) == true){
+			intake.Set(ControlMode::PercentOutput, -1.0);
+		}
+		else{
+			intake.Set(ControlMode::PercentOutput, 0.0);
+		}
 
 		frc::Wait(0.005);// The motors will be updated every 5ms
 	}
