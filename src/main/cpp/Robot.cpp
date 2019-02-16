@@ -7,6 +7,7 @@
 #include <frc/smartdashboard/SmartDashboard.h>
 #include <frc/DigitalInput.h>
 #include <frc/AnalogInput.h>
+#include <frc/DoubleSolenoid.h>
 #include "ctre/Phoenix.h"
 
 Robot::Robot() {
@@ -21,22 +22,27 @@ const double WHEEL_SEPERATION_LENGTH = 27/2;
 frc::Joystick stick0{0};
 frc::Joystick stick1{1};
 
-TalonSRX driveLF = {1};//Mecanum Left Front
-TalonSRX driveLR = {2};//Mecanum Left Rear
-TalonSRX driveRF = {3};//Mecanum Right Front
-TalonSRX driveRR = {4};//Mecanum Right Rear
-TalonSRX lift1 = {5};//Lift Master
-VictorSPX lift2 = {6};//Lift Slave
-TalonSRX arm1 = {7};//Arm Master
-VictorSPX arm2 = {8};//Arm Slave
-VictorSPX intake = {9};//Intake
+TalonSRX driveLF = {0};//Mecanum Left Front
+TalonSRX driveLR = {1};//Mecanum Left Rear
+TalonSRX driveRF = {2};//Mecanum Right Front
+TalonSRX driveRR = {3};//Mecanum Right Rear
+TalonSRX lift1 = {4};//Lift Master
+VictorSPX lift2 = {5};//Lift Slave
+TalonSRX arm1 = {6};//Arm Master
+VictorSPX arm2 = {7};//Arm Slave
+VictorSPX intake = {8};//Intake
+TalonSRX climber1 = {9};//Climber Master
+VictorSPX climber2 = {10};//Climber Slave
 
-frc::DigitalInput LimLTop(0);//Limit switch lift top
-frc::DigitalInput LimLBot(1);//Limit switch lift bottom
-frc::DigitalInput LimAMax(2);//Limit switch arm max
-frc::DigitalInput LimAMin(3);//Limit switch arm min
+frc::DoubleSolenoid pushyBoi1(0, 1);//Disc Scoring Cylinder
+frc::DoubleSolenoid pushyBoi2(2, 3);//Disc Scoring Cylinder
 
-frc::AnalogInput PotArm(0);//Potentiometer for arm rotation
+frc::DigitalInput limLTop(0);//Limit switch lift top
+frc::DigitalInput limLBot(1);//Limit switch lift bottom
+frc::DigitalInput limAMax(2);//Limit switch arm max
+frc::DigitalInput limAMin(3);//Limit switch arm min
+
+frc::AnalogInput potArm(0);//Potentiometer for arm rotation
 
 //Mecanum Output Variables
 double LF_Out;
@@ -61,13 +67,13 @@ double fabs(double input){
 
 void Robot::RobotInit() {
 	//Motor Configurations
-	driveLF.SetInverted(true);
+	driveLF.SetInverted(false);
 	driveLF.SetNeutralMode(Brake);
 	driveLR.SetInverted(true);
 	driveLR.SetNeutralMode(Brake);
 	driveRF.SetInverted(false);
 	driveRF.SetNeutralMode(Brake);
-	driveRR.SetInverted(false);
+	driveRR.SetInverted(true);
 	driveRR.SetNeutralMode(Brake);
 	arm1.SetInverted(false);
 	arm1.SetNeutralMode(Brake);
@@ -82,7 +88,6 @@ void Robot::RobotInit() {
 
 	lift2.Set(ControlMode::Follower, 5);
 	arm2.Set(ControlMode::Follower, 7);
-
 
 	m_chooser.SetDefaultOption(kAutoNameDefault, kAutoNameDefault);
 	m_chooser.AddOption(kAutoNameCustom, kAutoNameCustom);
@@ -108,42 +113,46 @@ void Robot::OperatorControl() {
 		//Lazy mecanum
 		double Y_in = (fabs(stick0.GetY()) > THRESHOLD) ? stick0.GetY() : 0;
 		double X_in = (fabs(stick0.GetX()) > THRESHOLD) ? stick0.GetX() : 0;
-		double Z_in = (fabs(stick0.GetZ()) > THRESHOLD) ? stick0.GetZ() : 0;
+		double Z_in = (fabs(stick0.GetThrottle()) > THRESHOLD) ? stick0.GetThrottle() : 0;//For some reason the twist axis is getthrottle not gettwist or getz
 
-		LF_Out = (1/WHEEL_RADIUS) * (X_in - Y_in - (WHEEL_SEPERATION_LENGTH + WHEEL_SEPERATION_WIDTH) * Z_in);
-		LR_Out = (1/WHEEL_RADIUS) * (X_in + Y_in - (WHEEL_SEPERATION_LENGTH + WHEEL_SEPERATION_WIDTH) * Z_in);
-		RF_Out = (1/WHEEL_RADIUS) * (X_in + Y_in + (WHEEL_SEPERATION_LENGTH + WHEEL_SEPERATION_WIDTH) * Z_in);
-		RR_Out = (1/WHEEL_RADIUS) * (X_in - Y_in + (WHEEL_SEPERATION_LENGTH + WHEEL_SEPERATION_WIDTH) * Z_in);
-		
+		LF_Out = X_in - Y_in + Z_in;
+		LR_Out = X_in + Y_in - Z_in;
+		RF_Out = X_in + Y_in + Z_in;
+		RR_Out = X_in - Y_in - Z_in;
+		/*
 		//Fancy Mecanum
 		double Magnitude = sqrt((stick0.GetY() * stick0.GetY()) + (stick0.GetX() * stick0.GetX()));
 		double Angle = atan(stick0.GetY()/stick0.GetX());
-		double Twist = stick0.GetZ();
+		double Twist = stick0.GetThrottle();
 
 		RR_Out = Magnitude * sin(Angle + (3.14159/4)) - Twist;
 		LF_Out = Magnitude * sin(Angle + (3.14159/4)) + Twist;
 		LR_Out = Magnitude * cos(Angle + (3.14159/4)) + Twist;
 		RF_Out = Magnitude * cos(Angle + (3.14159/4)) - Twist;
+		*/
+
+		printf("X in: %f, Y in: %f, Z in : %f\n", X_in, Y_in, Z_in);
+
 		
 		driveLF.Set(ControlMode::PercentOutput, LF_Out);
 		driveLR.Set(ControlMode::PercentOutput, LR_Out);
 		driveRF.Set(ControlMode::PercentOutput, RF_Out);
 		driveRR.Set(ControlMode::PercentOutput, RR_Out);
-
-		if(stick1.GetRawButton(3) == true && LimLTop.Get() == false){
+		
+		if(stick1.GetRawButton(3) == true && limLTop.Get() == false){
 			lift1.Set(ControlMode::PercentOutput, 1.0);
 		}
-		else if(stick1.GetRawButton(4) == true && LimLBot.Get() == false){
+		else if(stick1.GetRawButton(4) == true && limLBot.Get() == false){
 			lift1.Set(ControlMode::PercentOutput, -1.0);
 		}
 		else{
 			lift1.Set(ControlMode::PercentOutput, 0.3);
 		}
 
-		if(stick1.GetY() > THRESHOLD && LimAMax.Get() == false){
+		if(stick1.GetY() > THRESHOLD && limAMax.Get() == false){
 			arm1.Set(ControlMode::PercentOutput, stick1.GetY());
 		}
-		else if(stick1.GetY() < -THRESHOLD && LimAMin.Get() == false){
+		else if(stick1.GetY() < -THRESHOLD && limAMin.Get() == false){
 			arm1.Set(ControlMode::PercentOutput, stick1.GetY());
 		}
 		else{
