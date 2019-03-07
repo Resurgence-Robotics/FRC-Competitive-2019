@@ -3,7 +3,6 @@
 #include <string>
 
 #include <frc/Joystick.h>
-#include <frc/PWMVictorSPX.h>
 #include <frc/SampleRobot.h>
 #include <frc/smartdashboard/SendableChooser.h>
 
