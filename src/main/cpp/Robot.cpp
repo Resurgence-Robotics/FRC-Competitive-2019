@@ -10,6 +10,7 @@
 #include <frc/AnalogInput.h>
 #include <frc/DoubleSolenoid.h>
 #include <frc/Encoder.h>
+#include <frc/DriverStation.h>
 #include <CameraServer/CameraServer.h>
 #include <cscore.h>
 #include <networktables/NetworkTable.h>
@@ -22,7 +23,11 @@ Robot::Robot() {
 }
 
 const double THRESHOLD = 0.1;
-
+const double offsetHalf = 0.0;
+const double offsetHatchLoad = 0.0;
+const double offsetHatchScore = 0.0;
+const double offsetBallLoad = 0.0;
+const double offsetBallScore = 0.0;
 
 frc::Joystick stick0{0};
 bool prevTrigger0 = false;//For camera toggle
@@ -48,9 +53,7 @@ VictorSPX intake = {8};//Intake
 frc::DoubleSolenoid pushyBoi(0, 1);//Disc Scoring Cylinder
 frc::DoubleSolenoid tiltyBoi(2, 3);//Disc Tilting Cylinder
 
-//frc::I2C I2Channel(frc::I2C::Port::kOnboard, 0x08);//I2C for communicating with LED arduino
 frc::I2C I2CChannel(frc::I2C::kOnboard, 0x08);
-
 
 frc::DigitalInput limAMin(1);//Limit switch for arm minimum rotation
 frc::DigitalInput limAMax(2);//Limit switch for arm maximum rotation
@@ -63,9 +66,10 @@ cs::UsbCamera camera1;//Front Camera
 //cs::UsbCamera camera2;//Rear Camera
 cs::VideoSink server;
 
-
 nt::NetworkTableEntry Bearing;
 nt::NetworkTableEntry Displacement;
+
+frc::DriverStation::Alliance color;
 
 //Mecanum Output Variables
 double LF_Out;
@@ -74,6 +78,7 @@ double RF_Out;
 double RR_Out;
 
 double armLast;//For position holding
+double armInitial;
 int manipPosition = 0;
 
 void WriteArduino(uint8_t data){
@@ -116,7 +121,8 @@ void Robot::RobotInit() {
 	driveRF.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 	driveRR.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 
-	armLast = potArm.GetVoltage();	
+	armLast = potArm.GetVoltage();
+	armInitial = potArm.GetVoltage();
 
 	pushyBoi.Set(frc::DoubleSolenoid::kReverse);//Disc pushing solenoid
 	tiltyBoi.Set(frc::DoubleSolenoid::kForward);//Bar Moving solenoid
@@ -128,7 +134,9 @@ void Robot::RobotInit() {
 
 	server.SetSource(camera1);
 
-	WriteArduino(119);
+	color = frc::DriverStation::GetInstance().GetAlliance();
+
+	WriteArduino(117);
 
 	//Network table stuff
 	auto inst = nt::NetworkTableInstance::GetDefault();
@@ -180,7 +188,7 @@ double clip(double max, double min, double input){
 void setLeds(int mode){
 //'r' = 114, 'g' = 103, 'b' = 98, 'u' = 117, 'c' = 99, 'h' = 104, 'o' = 111 'w' = 199
 //u = rainbow all , c = flash green at top of elev., h = flash red at top of elev, r= red, g = green, b= blue
-// o = all off
+//o = all off
 
   switch(mode){
     case 0:
@@ -274,7 +282,7 @@ void fieldCentricMecanum(){//WIP and no gyro
 	double Z_in = (fabs(stick0.GetThrottle()) > THRESHOLD) ? stick0.GetThrottle() : 0;
 	
 	double angle = ahrs.GetYaw();//Gyro angle from initial heading
-	double theta = angle * (180/3.14159);//Angle but int radians
+	double theta = angle * (180/3.14159);//Angle but in radians
 	double straight = (Y_in * cos(theta)) + (X_in * sin(theta));//Forward/backward vector component
 	double strafe =  (-Y_in * sin(theta)) + (X_in * cos(theta));//Left/right vector component
 	double spin = turnTuner * Z_in;//Rotational component
@@ -352,6 +360,13 @@ double armPID(double input, double P, double I, double D){
 	return armPIDOutput;
 }
 
+double trigScale(double input){
+	double angle = map(armInitial, armInitial + (2 * offsetHalf), 360, 0, input);
+	double theta = (3.1415/180) * angle;
+	double output;
+
+	output = input * sin(angle);
+}
 
 void armManualControl(){//Manual control for Arm motors
 	if(stick1.GetY() > THRESHOLD  && stick1.GetRawButton(2) == true){
@@ -437,7 +452,6 @@ void tilty(){
 //2:Hatch score 3.605957 
 //3:Ball load 3.743896
 //4:Ball Score 3.289795 
-
 void manipulatorControl(){//Button control for the arm and lift
 	if(stick1.GetRawButton(2) && !stick1.GetRawButton(1)){//Top
 		manipPosition = 3;
@@ -467,22 +481,6 @@ void manipulatorControl(){//Button control for the arm and lift
 		break;
 		case 0:
 		default:
-		/*
-			if(limLTop.Get() == true){
-				lift1.Set(ControlMode::PercentOutput, 0.5);
-			}
-			else{
-				lift1.Set(ControlMode::PercentOutput, 0.0);
-			}
-
-			if(limAMin.Get() == true){
-				arm1.Set(ControlMode::PercentOutput, -0.5);
-			}
-			else{
-				arm1.Set(ControlMode::PercentOutput, 0.0);
-			}
-		break;
-		*/
 		break;
 	}
 }
@@ -522,8 +520,21 @@ void potEncoder(){
 */
 
 void Robot::Autonomous() {
+	if(color == frc::DriverStation::Alliance::kBlue){
+		WriteArduino(98);
+	}
+	else if(color == frc::DriverStation::Alliance::kRed){
+		WriteArduino(114);
+	}
+	else{
+		WriteArduino(103);
+	}
 	while (IsAutonomous() && IsEnabled()) {
 		printf("Pot Voltage %f\n", potArm.GetVoltage());
+
+		if(limAMin.Get() == true){
+			armInitial = potArm.GetVoltage();
+		}
 
 		lazyMecanum();
 		liftManualControl();
@@ -535,16 +546,27 @@ void Robot::Autonomous() {
 		tilty();
 		//cameraControl();
 		
-		frc::Wait(0.005);// The motors will be updated every 5ms
+		frc::Wait(0.02);// The motors will be updated every 5ms
 	}
 }
 
 void Robot::OperatorControl() {
-	WriteArduino(99);
+	if(color == frc::DriverStation::Alliance::kBlue){
+		WriteArduino(98);
+	}
+	else if(color == frc::DriverStation::Alliance::kRed){
+		WriteArduino(114);
+	}
+	else{
+		WriteArduino(103);
+	}
 	while (IsOperatorControl() && IsEnabled()) {
 		printf("Pot Voltage %f\n", potArm.GetVoltage());
-		//potEncoder();
-		
+
+		if(limAMin.Get() == true){
+			armInitial = potArm.GetVoltage();
+		}
+
 		lazyMecanum();
 		//liftManualControl();
 
@@ -564,11 +586,6 @@ void Robot::OperatorControl() {
 		pushy();
 		tilty();
 		//cameraControl();
-
-		//printf("limamax: %i\n", limAMax.Get());		
-		//printf("limamin: %i\n", limAMin.Get());		
-		//printf("limlbot: %i\n", limLBot.Get());		
-		//printf("limltop: %i\n", limLTop.Get());				
 
 		frc::Wait(0.02);// The motors will be updated every 5ms
 	}
