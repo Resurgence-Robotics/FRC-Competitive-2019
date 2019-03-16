@@ -23,18 +23,20 @@ Robot::Robot() {
 }
 
 const double THRESHOLD = 0.1;
-const double offsetHalf = 0.0;
-const double offsetHatchLoad = 0.0;
-const double offsetHatchScore = 0.0;
-const double offsetBallLoad = 0.0;
-const double offsetBallScore = 0.0;
+
+//Arm Position offsets
+const double OFFSET_HALF = 0.0;
+const double OFFSET_HATCH = -0.170898;
+const double OFFSET_BALL_LOAD = -0.190898;
+const double OFFSET_BALL_SCORE = -0.543213;
+const double OFFSET_OVERHEAD = -1.176757;
 
 frc::Joystick stick0{0};
-bool prevTrigger0 = false;//For camera toggle
+bool prevTrigger0 = false;//Camera toggle
 frc::Joystick stick1{1};
 bool prevTrigger1 = false;//Unused toggle
-bool prev3 = false;//Puhsy toggle
-bool prev5 = false;//Tilty toggle
+bool prev4 = false;//Puhsy toggle
+bool prev6 = false;//Tilty toggle
 
 bool manualOverride = false;//Manual arm control override
 
@@ -59,6 +61,7 @@ frc::DigitalInput limAMin(1);//Limit switch for arm minimum rotation
 frc::DigitalInput limAMax(2);//Limit switch for arm maximum rotation
 frc::DigitalInput limLTop(3);//Limit switch lift top
 frc::DigitalInput limLBot(4);//Limit switch lift bottom
+frc::DigitalInput battleEye(5);//Photoeye for cargo detection
 
 frc::AnalogInput potArm(0);//Potentiometer for arm rotation
 
@@ -298,10 +301,10 @@ void fieldCentricMecanum(){//WIP and no gyro
 */
 
 void liftManualControl(){//Manual control for Lift motors
-	if(stick1.GetRawButton(4) == true && limLTop.Get() == true){
+	if(stick1.GetRawButton(7) == true && limLTop.Get() == true){
 		setLift(1.0);
 	}
-	else if(stick1.GetRawButton(6) == true && limLBot.Get() == true){
+	else if(stick1.GetRawButton(9) == true && limLBot.Get() == true){
 		setLift(-1.0);
 	}
 	else{
@@ -361,10 +364,10 @@ double armPID(double input, double P, double I, double D){
 }
 
 double trigScale(double input){
-	double angle = map(armInitial, armInitial + (2 * offsetHalf), 360, 0, input);
+	double angle = map(armInitial, armInitial + (2 * OFFSET_HALF), 360, 0, input);
 	double theta = (3.1415/180) * angle;
 	double output;
-
+	
 	output = input * sin(angle);
 }
 
@@ -384,22 +387,15 @@ void armManualControl(){//Manual control for Arm motors
 	}
 }
 
-double countdown = 0.0;
 void intakeControl(){//Control for Intake motor 
 	if(stick1.GetRawButton(1) == true){
 		intake.Set(ControlMode::PercentOutput, 0.7);
-		countdown = 0.7;
 	}
-	else if(stick1.GetRawButton(7) == true){
-		intake.Set(ControlMode::PercentOutput, -0.7
-		);
-		countdown = 0.7;
+	else if(stick1.GetRawButton(2) == true){
+		intake.Set(ControlMode::PercentOutput, -0.7);
 	}
 	else{ 
 		intake.Set(ControlMode::PercentOutput, (0.35));
-		//if(countdown > 0.0){
-		//	countdown -= 0.02;
-		//}
 	}
 }
 
@@ -418,69 +414,73 @@ void climberControl(){//Control for climber motors
 */
 
 void pushy(){
-	if(stick1.GetRawButton(3) && !prev3){
+	if(stick1.GetRawButton(4) && !prev4){
 		if(pushyBoi.Get() == frc::DoubleSolenoid::kReverse){
 			pushyBoi.Set(frc::DoubleSolenoid::kForward);
 		}
 		else if(pushyBoi.Get() == frc::DoubleSolenoid::kForward){
 			pushyBoi.Set(frc::DoubleSolenoid::kReverse);
 		}
-	}else if (!stick1.GetRawButton(3) && prev3){
+	}else if (!stick1.GetRawButton(4) && prev4){
 		
 	}
-	prev3 = stick1.GetRawButton(3);
+	prev4 = stick1.GetRawButton(4);
 }
 
-
 void tilty(){
-	if(stick1.GetRawButton(5) && !prev5){
+	if(stick1.GetRawButton(6) && !prev6){
 		if(tiltyBoi.Get() == frc::DoubleSolenoid::kReverse){
 			tiltyBoi.Set(frc::DoubleSolenoid::kForward);
 		}
 		else if(tiltyBoi.Get() == frc::DoubleSolenoid::kForward){
 			tiltyBoi.Set(frc::DoubleSolenoid::kReverse);
 		}
-	}else if (!stick1.GetRawButton(5) && prev5){
+	}else if (!stick1.GetRawButton(6) && prev6){
 		
 	}
-	prev5 = stick1.GetRawButton(5);
+	prev6 = stick1.GetRawButton(6);
 }
 
-//Min Ref: 3.831787
-//0:Starting 
-//1:Hatch Load 3.753662 
-//2:Hatch score 3.605957 
-//3:Ball load 3.743896
-//4:Ball Score 3.289795 
+//0:Starting 3.056640		0.0
+//1:Hatch Stuff 2.885742	-0.170898
+//2:Ball load 2.865742		-0.190898
+//3:Ball Score 2.513427		-0.543213
+//4:David's Folly 1.879883	-1.176757
 void manipulatorControl(){//Button control for the arm and lift
-	if(stick1.GetRawButton(2) && !stick1.GetRawButton(1)){//Top
+	/*
+
+	
+	*/
+	if(stick1.GetRawButton(11)){
+		manipPosition = 1;
+	}
+	else if(stick1.GetRawButton(12)){
+		manipPosition = 2;
+	}
+	else if(stick1.GetRawButton(10)){
 		manipPosition = 3;
 	}
-	else if(stick1.GetRawButton(6) && !stick1.GetRawButton(1)){//Middle
-		manipPosition = 3;
-	}
-	else if(stick1.GetRawButton(4) && !stick1.GetRawButton(1)){//Bottom
+	else if(stick1.GetRawButton(8)){
 		manipPosition = 4;
 	}
-	else if(stick1.GetRawButton(2) && stick1.GetRawButton(1)){//Load
-		//manipPosition = 1;
-	}
+	
 
 	switch(manipPosition){
-		case 1://Hatch load
-		setArm(armPID(3.753662, 0.1, 0, 0));
+		case 1://Hatch stuff
+		setArm(armPID(armInitial + OFFSET_HATCH, 0.2, 0, 0));
 		break;
-		case 2://Hatch score
-		setArm(armPID(3.605957, 0.3, 0, 0));
+		case 2://Cargo Load
+		setArm(armPID(armInitial + OFFSET_BALL_LOAD, 0.4, 0, 0));
 		break;
-		case 3://Cargo load
-		setArm(armPID(3.7481685, 0.1, 0, 0));
+		case 3://Cargo Score
+		setArm(armPID(armInitial + OFFSET_BALL_SCORE, 0.7, 0, 0));
 		break;
-		case 4://Cargo score
-		setArm(armPID(3.289795, 0.5, 0 , 0));
+		case 4://Overhead
+		setArm(armPID(armInitial + OFFSET_OVERHEAD, 0.5, 0, 0));
 		break;
-		case 0:
+		case 0://Starting
 		default:
+		setArm(armPID(armInitial, 0.1, 0, 0));
 		break;
 	}
 }
@@ -503,23 +503,8 @@ void cameraControl(){//Control for Camera switching
 }
 */
 
-/*
-float encoderValues[] = {0.0, 0.0, 0.0, 0.0};//Current Rev voltage, current number of revs, last rev voltage, last number of revs
-void potEncoder(){
-	encoderValues[2] = encoderValues[0];
-	encoderValues[3] = encoderValues[1];
-	encoderValues[0] = potArm.GetVoltage();
-
-	if((encoderValues[0] - encoderValues[2]) < -1){
-		encoderValues[1]++;
-	}
-	else if((encoderValues[0] - encoderValues[2]) > 1){
-		encoderValues[1]--;
-	}
-}
-*/
-
 void Robot::Autonomous() {
+	manipPosition = 0;
 	if(color == frc::DriverStation::Alliance::kBlue){
 		WriteArduino(98);
 	}
@@ -531,10 +516,24 @@ void Robot::Autonomous() {
 	}
 	while (IsAutonomous() && IsEnabled()) {
 		printf("Pot Voltage %f\n", potArm.GetVoltage());
-
-		if(limAMin.Get() == true){
-			armInitial = potArm.GetVoltage();
+		
+		if(potArm.GetVoltage() < 0.25 || potArm.GetVoltage() > 4.75){
+			printf("Arm pot approaching hard stop\n");
 		}
+
+		if(limAMin.Get() == false){
+			armInitial = potArm.GetVoltage();
+			printf("Reset arm initial: %f\n", armInitial);
+		}
+
+		/*
+		if(manualOverride == true){
+			armManualControl();
+		}
+		else if(manualOverride == false){
+			manipulatorControl();
+		}
+		*/
 
 		lazyMecanum();
 		liftManualControl();
@@ -551,6 +550,7 @@ void Robot::Autonomous() {
 }
 
 void Robot::OperatorControl() {
+	manipPosition = 0;
 	if(color == frc::DriverStation::Alliance::kBlue){
 		WriteArduino(98);
 	}
@@ -563,12 +563,14 @@ void Robot::OperatorControl() {
 	while (IsOperatorControl() && IsEnabled()) {
 		printf("Pot Voltage %f\n", potArm.GetVoltage());
 
-		if(limAMin.Get() == true){
-			armInitial = potArm.GetVoltage();
+		if(potArm.GetVoltage() < 0.25 || potArm.GetVoltage() > 4.75){
+			printf("Arm pot approaching hard stop\n");
 		}
 
-		lazyMecanum();
-		//liftManualControl();
+		if(limAMin.Get() == false){
+			armInitial = potArm.GetVoltage();
+			printf("Reset arm initial: %f\n", armInitial);
+		}
 
 		/*
 		if(manualOverride == true){
@@ -578,7 +580,9 @@ void Robot::OperatorControl() {
 			manipulatorControl();
 		}
 		*/
-
+		
+		lazyMecanum();
+		//liftManualControl();
 		manipulatorControl();
 		//armManualControl();
 		intakeControl();
@@ -593,7 +597,6 @@ void Robot::OperatorControl() {
 
 
 void Robot::Test() {
-
 }
 
 #ifndef RUNNING_FRC_TESTS
