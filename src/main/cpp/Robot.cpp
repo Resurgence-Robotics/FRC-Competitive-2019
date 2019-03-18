@@ -22,12 +22,12 @@ Robot::Robot() {
 	
 }
 
-const double THRESHOLD = 0.1;
+const double THRESHOLD = 0.2;
 
 //Arm Position offsets
 const double OFFSET_HALF = 0.0;
-const double OFFSET_HATCH = -0.170898;
-const double OFFSET_BALL_LOAD = -0.190898;
+const double OFFSET_HATCH = -0.250898;
+const double OFFSET_BALL_LOAD = -0.140898;
 const double OFFSET_BALL_SCORE = -0.543213;
 const double OFFSET_OVERHEAD = -1.176757;
 
@@ -35,7 +35,8 @@ frc::Joystick stick0{0};
 bool prevTrigger0 = false;//Camera toggle
 frc::Joystick stick1{1};
 bool prevTrigger1 = false;//Unused toggle
-bool prev4 = false;//Puhsy toggle
+bool prev4 = false;//Pushy toggle
+bool prev5 = false;//Override toggle
 bool prev6 = false;//Tilty toggle
 
 bool manualOverride = false;//Manual arm control override
@@ -103,9 +104,9 @@ void Robot::RobotInit() {
 	arm1.SetNeutralMode(Brake);
 	arm2.SetInverted(false);
 	arm2.SetNeutralMode(Brake);
-	lift1.SetInverted(true);
+	lift1.SetInverted(false);
 	lift1.SetNeutralMode(Brake);
-	lift2.SetInverted(false);
+	lift2.SetInverted(true);
 	lift2.SetNeutralMode(Brake);
 	intake.SetInverted(false);
 	intake.SetNeutralMode(Brake);
@@ -143,16 +144,16 @@ void Robot::RobotInit() {
 
 	//Network table stuff
 	auto inst = nt::NetworkTableInstance::GetDefault();
-	auto table = inst.GetTable("dataTable");
-	Bearing = table->GetEntry("Bearing");
+	auto table = inst.GetTable("Vision");
+	Bearing = table->GetEntry("angle");
 	Displacement = table->GetEntry("Displacement");
-
-	printf("Valentia \'Val\' Tereshkova online\n");
+	Bearing.SetDefaultValue(nt::NetworkTableValue::MakeDouble(0.5));
+	printf("Valentina \'Val\' Tereshkova online\n");
 }
 
 //Absolute value function for floating point numbers
 //Arg input: number to be absolutely valued
-double fabs(double input){
+double dabs(double input){
 	if(input >= 0){
 		return input;
 	}
@@ -249,11 +250,26 @@ void setClimber(double speed){
 }
 */
 
-void lazyMecanum(){//Working and preffered
-	double Y_in = (fabs(stick0.GetY()) > THRESHOLD) ? stick0.GetY() : 0;
-	double X_in = (fabs(stick0.GetX()) > THRESHOLD) ? stick0.GetX() : 0;
-	double Z_in = (fabs(stick0.GetThrottle()) > THRESHOLD) ? stick0.GetThrottle() : 0;//For some reason the twist axis is getthrottle not gettwist or getz
 
+
+void lazyMecanum(){//Working and preffered
+	double Y_in = (dabs(stick0.GetY()) > THRESHOLD) ? stick0.GetY() : 0.0;
+	double X_in = (dabs(stick0.GetX()) > THRESHOLD) ? stick0.GetX() : 0.0;
+	double Z_in;
+	if(stick0.GetRawButton(7) == true){
+		if(Bearing.GetValue() > 0){
+			Z_in = 0.5;
+		}
+		else if(Bearing.GetValue() < 0){
+			Z_in = -0.5;
+		}
+		else{
+			Z_in = 0.0;
+		}
+	}
+	else{
+		Z_in = (dabs(stick0.GetThrottle()) > THRESHOLD) ? stick0.GetThrottle() : 0.0;//For some reason the twist axis is getthrottle not gettwist or getz
+	}
 	LF_Out = X_in - Y_in + Z_in;
 	LR_Out = X_in + Y_in - Z_in;
 	RF_Out = X_in + Y_in + Z_in;
@@ -280,9 +296,9 @@ void fancyMecanum(){//WIP
 /*
 void fieldCentricMecanum(){//WIP and no gyro
 	double turnTuner = 0;//Adjust to increase the speed of turns
-	double X_in = (fabs(stick0.GetX()) > THRESHOLD) ? stick0.GetX() : 0;
-	double Y_in = (fabs(stick0.GetY()) > THRESHOLD) ? stick0.GetY() : 0;
-	double Z_in = (fabs(stick0.GetThrottle()) > THRESHOLD) ? stick0.GetThrottle() : 0;
+	double X_in = (dabs(stick0.GetX()) > THRESHOLD) ? stick0.GetX() : 0;
+	double Y_in = (dabs(stick0.GetY()) > THRESHOLD) ? stick0.GetY() : 0;
+	double Z_in = (dabs(stick0.GetThrottle()) > THRESHOLD) ? stick0.GetThrottle() : 0;
 	
 	double angle = ahrs.GetYaw();//Gyro angle from initial heading
 	double theta = angle * (180/3.14159);//Angle but in radians
@@ -363,6 +379,29 @@ double armPID(double input, double P, double I, double D){
 	return armPIDOutput;
 }
 
+double runLift(int position){
+	switch(position){
+		case 0://Bottom
+		if(limLBot.Get() == true){
+			setLift(-1.0);
+		}
+		else{
+			setLift(0.0);
+		}
+		break;
+		case 1://Top
+		if(limLTop.Get() == true){
+			setLift(1.0);
+		}
+		else{
+			setLift(0.0);
+		}
+		break;
+		default:
+		setLift(0.0);
+	}
+}
+
 double trigScale(double input){
 	double angle = map(armInitial, armInitial + (2 * OFFSET_HALF), 360, 0, input);
 	double theta = (3.1415/180) * angle;
@@ -372,12 +411,12 @@ double trigScale(double input){
 }
 
 void armManualControl(){//Manual control for Arm motors
-	if(stick1.GetY() > THRESHOLD  && stick1.GetRawButton(2) == true){
+	if(stick1.GetY() > THRESHOLD  && stick1.GetRawButton(3) == true){
 		arm1.Set(ControlMode::PercentOutput, stick1.GetY());
 		arm2.Set(ControlMode::PercentOutput, stick1.GetY());
 		armLast = potArm.GetVoltage();
 	}
-	else if(stick1.GetY() < -THRESHOLD && stick1.GetRawButton(2) == true){
+	else if(stick1.GetY() < -THRESHOLD && stick1.GetRawButton(3) == true){
 		arm1.Set(ControlMode::PercentOutput, stick1.GetY());
 		arm2.Set(ControlMode::PercentOutput, stick1.GetY());
 		armLast = potArm.GetVoltage();
@@ -393,6 +432,9 @@ void intakeControl(){//Control for Intake motor
 	}
 	else if(stick1.GetRawButton(2) == true){
 		intake.Set(ControlMode::PercentOutput, -0.7);
+	}
+	else if(potArm.GetVoltage() < (armInitial + OFFSET_OVERHEAD) - 0.25){
+		intake.Set(ControlMode::PercentOutput, -1.0);
 	}
 	else{ 
 		intake.Set(ControlMode::PercentOutput, (0.35));
@@ -421,8 +463,6 @@ void pushy(){
 		else if(pushyBoi.Get() == frc::DoubleSolenoid::kForward){
 			pushyBoi.Set(frc::DoubleSolenoid::kReverse);
 		}
-	}else if (!stick1.GetRawButton(4) && prev4){
-		
 	}
 	prev4 = stick1.GetRawButton(4);
 }
@@ -435,8 +475,6 @@ void tilty(){
 		else if(tiltyBoi.Get() == frc::DoubleSolenoid::kForward){
 			tiltyBoi.Set(frc::DoubleSolenoid::kReverse);
 		}
-	}else if (!stick1.GetRawButton(6) && prev6){
-		
 	}
 	prev6 = stick1.GetRawButton(6);
 }
@@ -447,37 +485,45 @@ void tilty(){
 //3:Ball Score 2.513427		-0.543213
 //4:David's Folly 1.879883	-1.176757
 void manipulatorControl(){//Button control for the arm and lift
-	/*
-
-	
-	*/
 	if(stick1.GetRawButton(11)){
 		manipPosition = 1;
 	}
-	else if(stick1.GetRawButton(12)){
+	else if(stick1.GetRawButton(12) || stick0.GetRawButton(2)){
 		manipPosition = 2;
 	}
 	else if(stick1.GetRawButton(10)){
 		manipPosition = 3;
 	}
 	else if(stick1.GetRawButton(8)){
-		manipPosition = 4;
+		manipPosition = 6;
 	}
 	
-
 	switch(manipPosition){
 		case 1://Hatch stuff
-		setArm(armPID(armInitial + OFFSET_HATCH, 0.2, 0, 0));
+		setArm(armPID(armInitial + OFFSET_HATCH, 0.4, 0, 0));
+		//runLift(1);
 		break;
 		case 2://Cargo Load
 		setArm(armPID(armInitial + OFFSET_BALL_LOAD, 0.4, 0, 0));
+		//runLift(1);
 		break;
 		case 3://Cargo Score
 		setArm(armPID(armInitial + OFFSET_BALL_SCORE, 0.7, 0, 0));
+		//runLift(1);
 		break;
-		case 4://Overhead
+		case 4://Level 1
+		setArm(armPID(armInitial + OFFSET_HATCH, 0.5, 0, 0));
+		//runLift(1);
+		break;
+		case 5://Level 2
 		setArm(armPID(armInitial + OFFSET_OVERHEAD, 0.5, 0, 0));
+		//runLift(0);
 		break;
+		case 6://Level 3
+		setArm(armPID(armInitial + OFFSET_OVERHEAD, 0.5, 0, 0));
+		//runLift(1);
+		break;
+		
 		case 0://Starting
 		default:
 		setArm(armPID(armInitial, 0.1, 0, 0));
@@ -496,8 +542,6 @@ void cameraControl(){//Control for Camera switching
 			printf("Setting camera 1\n");
 			server.SetSource(camera2);
 		}
-	}else if (!stick0.GetTrigger() && prevTrigger0){
-		
 	}
 	prevTrigger0 = stick0.GetTrigger();
 }
@@ -522,23 +566,31 @@ void Robot::Autonomous() {
 		}
 
 		if(limAMin.Get() == false){
-			armInitial = potArm.GetVoltage();
+			//armInitial = potArm.GetVoltage();
 			printf("Reset arm initial: %f\n", armInitial);
 		}
 
-		/*
+		if(stick1.GetRawButton(5) && !prev5){
+			manualOverride = !manualOverride;
+			armLast = potArm.GetVoltage();
+		}
+		prev5 = stick1.GetRawButton(5);
+		
 		if(manualOverride == true){
 			armManualControl();
+			liftManualControl();
+			printf("Manual Override");
 		}
 		else if(manualOverride == false){
 			manipulatorControl();
+			printf("PID Control");
 		}
-		*/
+		
 
 		lazyMecanum();
-		liftManualControl();
+		//liftManualControl();
 		//manipulatorControl();
-		armManualControl();
+		//armManualControl();
 		intakeControl();
 		//climberControl();
 		pushy();
@@ -562,35 +614,44 @@ void Robot::OperatorControl() {
 	}
 	while (IsOperatorControl() && IsEnabled()) {
 		printf("Pot Voltage %f\n", potArm.GetVoltage());
-
+		printf("NT Angle: %f, NT Null: %f\n", Bearing.GetDouble(0.5), Displacement.GetDouble(0.0));
+		
 		if(potArm.GetVoltage() < 0.25 || potArm.GetVoltage() > 4.75){
 			printf("Arm pot approaching hard stop\n");
 		}
 
 		if(limAMin.Get() == false){
-			armInitial = potArm.GetVoltage();
+			//armInitial = potArm.GetVoltage();
 			printf("Reset arm initial: %f\n", armInitial);
 		}
 
-		/*
+		if(stick1.GetRawButton(5) && !prev5){
+			manualOverride = !manualOverride;
+			armLast = potArm.GetVoltage();
+		}
+		prev5 = stick1.GetRawButton(5);
+		
 		if(manualOverride == true){
 			armManualControl();
+			liftManualControl();
+			printf("Manual Override");
 		}
 		else if(manualOverride == false){
 			manipulatorControl();
+			printf("PID Control");
 		}
-		*/
 		
+
 		lazyMecanum();
 		//liftManualControl();
-		manipulatorControl();
+		//manipulatorControl();
 		//armManualControl();
 		intakeControl();
 		//climberControl();
 		pushy();
 		tilty();
 		//cameraControl();
-
+		
 		frc::Wait(0.02);// The motors will be updated every 5ms
 	}
 }
